@@ -33,18 +33,14 @@ public class MainLauncher extends Application {
 		}
 	}
 	
-	
-	public static void main(String[] args) { launch(args); }
+	public static void onLaunch(String[] args) {
+		launch(args);
+	}
 	
 	@Override
 	public void stop(){
 	    System.out.println("Stage is closing");
 	    MainLauncherController.clientThread.stop();
 	    MainLauncherController.updateChatThread.stop();
-	}
-	
-	
-	public static void show() {
-		
 	}
 }

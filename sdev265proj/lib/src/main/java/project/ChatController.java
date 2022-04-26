@@ -50,8 +50,6 @@ public class ChatController {
     @FXML
     private Circle notReadCircle;
     
-    @FXML
-    private Label unreadMessagesLabel;
     
     private Client client;
     public Pair<String, String> lastMessage;
@@ -109,19 +107,7 @@ public class ChatController {
 					unreadMessages++;
 		});
 		
-		
-		if(unreadMessages > 0) {
-			if(unreadMessages > 9)
-				unreadMessagesLabel.setText("9+");
-			else 
-				unreadMessagesLabel.setText(unreadMessages + "");
-			
-			notReadCircle.setOpacity(1.0);
-			unreadMessagesLabel.setOpacity(1.0);
-		}
-		
-		 previewPane.getChildren().add(new Label("TEST"));
-		
+	
 	}
 	
 	public void refreshTime() {
@@ -194,6 +180,13 @@ public class ChatController {
 		}
 	}
 
-
+	
+	public void ping() {
+		notReadCircle.setOpacity(1.0);
+	}
+	
+	public void read() {
+		notReadCircle.setOpacity(0.0);
+	}
 
 }

@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -13,6 +14,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.common.hash.Hashing;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.database.DataSnapshot;
@@ -77,8 +79,9 @@ public class MainLauncherController {
 	public final Color TC = Color.valueOf("#e67e22");
 	public final Color ATC = Color.valueOf("#f39c12");
 	
-	private String username;
+	private String salt = "deaconesswellnessdesktopapplication";
 	
+	public static Thread coachThread;
 	public static Thread clientThread;
 	public static Thread updateChatThread;
 	
@@ -91,7 +94,8 @@ public class MainLauncherController {
 	private Pane overlayPane;
 	@FXML
     private Pane loginPane;
-	
+	@FXML
+	private Pane createPane;
 	
 	@FXML
     private Pane sidebar;
@@ -120,6 +124,8 @@ public class MainLauncherController {
 	private ListView<Client> clientListView;
 	private ArrayList<Client> clients = new ArrayList<>();
 	private HashMap<String, Client> allClients = new HashMap<>();
+	private HashMap<String, Coach> allCoaches = new HashMap<>();
+	private Coach loggedIn;
 	
 	@FXML
 	private DatePicker clientViewGoalDatePicker;
@@ -244,6 +250,10 @@ public class MainLauncherController {
     @FXML
     private Button loginBtn;
     private CustomButton customLoginBtn;
+    
+    @FXML
+    private Button loginCreateBtn;
+    private CustomButton customLoginCreateBtn;
 
     @FXML
     private Button sidebarBtn;
@@ -259,6 +269,37 @@ public class MainLauncherController {
     private CustomButton customClientBtn;
     
     
+    
+    
+    
+    
+    
+    @FXML
+    private Button createAccountBtn;
+    private CustomButton customCreateAccountBtn;
+    
+    @FXML
+    private Button createCloseBtn;
+    private CustomButton customCreateCloseBtn;
+
+    @FXML
+    private TextField createFirst;
+
+    @FXML
+    private TextField createLast;
+
+    @FXML
+    private TextField createDisplay;
+
+    @FXML
+    private TextField createEmail;
+
+    @FXML
+    private PasswordField createPassword;
+
+    @FXML
+    private PasswordField createConfirm;
+
     
     
     public void initialize() {
@@ -279,21 +320,22 @@ public class MainLauncherController {
 		}
     	
     	// Create and Start Individual Threads
+    	coachThread = new Thread(this::loadCoaches);
+    	coachThread.start();
+    	
     	clientThread = new Thread(this::loadClients);
-    	clientThread.start();
     	
-    	updateChatThread = new Thread(this::refreshChat);
-    	updateChatThread.start();
-    	
+    	updateChatThread = new Thread(this::refreshChat);    	
     	
     	/*////////////////////////////////////////////////////////////////////////*/
     	//                      INITIALIZE ALL CUSTOMBUTTONS                      //
     	/*////////////////////////////////////////////////////////////////////////*/
-    	panes = new Pane[]{ loginPane, chatPane, clientPane, overlayPane };
+    	panes = new Pane[]{ loginPane, createPane, chatPane, clientPane, overlayPane };
     	
     	//Login Buttons
         customLoginBtn = new CustomButton("Login", SC, loginBtn);
-    	loginPane.getChildren().add(customLoginBtn);
+        customLoginCreateBtn = new CustomButton("Create Account", SC, loginCreateBtn);
+    	loginPane.getChildren().addAll(customLoginBtn, customLoginCreateBtn);
     	
     	//Sidebar Buttons
     	customSidebarBtn = new CustomButton(">", ASC, sidebarBtn);
@@ -331,6 +373,11 @@ public class MainLauncherController {
     	// Alert - Alert 'Ok' Button
     	customAlertBtn = new CustomButton("Ok", OSC, alertBtn);
     	alertPane.getChildren().add(customAlertBtn);
+    	
+    	// Create Account - Create Button
+    	customCreateAccountBtn = new CustomButton("Create", OSC, createAccountBtn);
+    	customCreateCloseBtn = new CustomButton("X", SC, createCloseBtn);
+    	createPane.getChildren().addAll(customCreateAccountBtn, customCreateCloseBtn);
     	
     	/*////////////////////////////////////////////////////////////////////////*/
     	//                         ADDING GOALS TO CLIENT                         //
@@ -508,6 +555,7 @@ public class MainLauncherController {
     	customEditPopupClose.setOnMousePressed(event -> {
     		customEditPopupClose.press();
     		clientPane.setDisable(false);
+    		clientPane.setEffect(null);
     		pageFadeOut(whiteOverlay, true);
     		pageFadeOut(editPopupPane, true);
     	});
@@ -548,14 +596,35 @@ public class MainLauncherController {
 				if(user.length() == 0 || password.length() == 0) {
 					showAlert("Invalid Login", "Must Enter Both a Username and Password", loginPane);
 				} else {
-					username = user;
-					pageFadeOut(loginPane, true);
-					pageFadeIn(sidebar, false);
-					customSidebarBtn.setOpacity(1);
-			    	customSidebarBtn.setDisable(false);
+					
+					allCoaches.forEach((key, coach) -> {
+						if(coach.getEmail().toLowerCase().equals(user.toLowerCase())) {
+							if(coach.check(password)) {
+								loggedIn = coach;
+								clientThread.start();
+								updateChatThread.start();
+								pageFadeOut(loginPane, true);
+								pageFadeIn(sidebar, false);
+								customSidebarBtn.setOpacity(1);
+						    	customSidebarBtn.setDisable(false); 
+							}
+							else
+								showAlert("Invalid Login", "Password is incorrect.", loginPane);
+						}
+					});
+					
+					
 				}
 			}
     	});
+    	
+    	customLoginCreateBtn.setOnMousePressed(event -> {
+    		customLoginCreateBtn.press();
+    		pageFadeOut(loginPane, true);
+			pageFadeIn(createPane, false);
+    	});
+    	
+    	
     	
     	// Sidebar Arrow Button that toggle open/closes the sidebar
     	customSidebarBtn.setOnMousePressed(new EventHandler<MouseEvent>() {
@@ -595,6 +664,52 @@ public class MainLauncherController {
 			}
     	});
     	
+    	// Create Account Buttons: Creates an account when pressed and valid information is entered
+    	customCreateAccountBtn.setOnMousePressed(event -> {
+    		customCreateAccountBtn.press();
+    		String firstname = createFirst.getText(), lastname = createLast.getText(), display = createDisplay.getText(), email = createEmail.getText(), password = createPassword.getText(), confirm = createConfirm.getText();
+    		if(firstname.length() == 0 || lastname.length() == 0 || display.length() == 0 || email.length() == 0 || password.length() == 0 || confirm.length() == 0) 
+    			showAlert("Cannot Create Account", "Make sure all text fields are filled out with valid information.", createPane);
+    		else if(!email.contains("@") || !email.contains("."))
+    			showAlert("Cannot Create Account", "Make sure the entered email address is valid.", createPane);
+    		else if(!password.equals(confirm)) 
+    			showAlert("Cannot Create Account", "Passwords do not match. Please re-enter both fields carefully.", createPane);
+    		else {
+    			String coachDir = Hashing.sha256().hashString(salt + firstname + lastname + email, StandardCharsets.UTF_8).toString();
+    			String hashPassword = Hashing.sha256().hashString(salt + password, StandardCharsets.UTF_8).toString();
+    			
+    			DatabaseReference coaches = database.getReference("Main/Coaches/" + coachDir);
+    			Map<String, String> coachAccount = new HashMap<>();
+    			coachAccount.put("firstname", firstname);
+    			coachAccount.put("lastname", lastname);
+    			coachAccount.put("display", display);
+    			coachAccount.put("email", email);
+    			coachAccount.put("hash", hashPassword);
+    			coaches.setValue(coachAccount, null);
+				
+    			allCoaches.put(coachDir, new Coach(coachDir, firstname, lastname, display, email, hashPassword));
+    			
+    			createFirst.setText("");
+    			createLast.setText("");
+    			createDisplay.setText("");
+    			createEmail.setText("");
+    			createPassword.setText("");
+    			createConfirm.setText("");
+    			
+    			showAlert("Account Created", "Your account was successfully create. Welcome " + firstname + "! You should now be able to log in.", loginPane);
+    			
+    			pageFadeOut(createPane, true);
+        		pageFadeIn(loginPane, false);
+    		}
+    	});
+    	
+    	// Create Account Buttons: Closes the create account option, transitions to loginPane
+    	customCreateCloseBtn.setOnMousePressed(event -> {
+    		customCreateCloseBtn.press();
+    		pageFadeOut(createPane, true);
+    		pageFadeIn(loginPane, false);
+    	});
+    	
     	
     	/*////////////////////////////////////////////////////////////////////////*/
     	//                          CLIENT PANE CONTROLS                          //
@@ -613,6 +728,7 @@ public class MainLauncherController {
     	// Once a client is selected from ListView, load the client goals
     	clientListView.setOnMouseClicked(event -> {
     		if(clientListView.getSelectionModel().getSelectedIndex() != -1) {
+    			clientViewGoalDatePicker.setValue(null);
 				goalListView.getItems().clear();
 				fitnessListView.getItems().clear();
 				nutritionalListView.getItems().clear();
@@ -624,15 +740,39 @@ public class MainLauncherController {
     	// TODO POSSIBLY REMOVE THIS?
     	// Once a date is selected from DatePicker, pick that weeks Sunday date (BEFORE NOT AFTER)
     	clientViewGoalDatePicker.setOnAction(event -> {
-			LocalDate date = clientViewGoalDatePicker.getValue();
-			DayOfWeek dow = date.getDayOfWeek();
-			int count = 0;
-			while(!dow.equals(DayOfWeek.SUNDAY)) {
-				dow = dow.minus(1);
-				count++;
-			}
-			date = date.minusDays(count);
+    		if(clientListView.getSelectionModel().getSelectedItem() != null) {
+    			fitnessListView.getItems().clear();
+    			nutritionalListView.getItems().clear();
+	    		String key = clientListView.getSelectionModel().getSelectedItem().getKey();
+	    		if(clientViewGoalDatePicker.getValue() != null) {
+					LocalDate date = clientViewGoalDatePicker.getValue();
+					DayOfWeek dow = date.getDayOfWeek();
+					int count = 0;
+					while(!dow.equals(DayOfWeek.SUNDAY)) {
+						dow = dow.minus(1);
+						count++;
+					}
+					date = date.minusDays(count);
+					clientViewGoalDatePicker.setValue(date);
+					
+					goalListView.getItems().clear();
+					boolean found = false;
+					for(Goal goal : allClients.get(key).goals)
+						if(goal.equals(date)) {
+							goalListView.getItems().add(goal);
+							found = true;
+						}
+	    		} else {
+	    			goalListView.getItems().clear();
+	    			goalListView.getItems().addAll(allClients.get(key).goals);
+	    		}
+    		} else {
+    			clientViewGoalDatePicker.setValue(null);
+    			showAlert("No Client Selected", "Make sure you select a client before searching for weekly goals.", clientPane);
+    		}
 		});
+    	
+    	
     	
     	// Creates a weekly goal, if not already created, from the week selected from the DatePicker. Creates the goal under the beginning Sunday of that week. 
     	customClientCreateNewGoalBtn.setOnMousePressed(event -> {
@@ -709,11 +849,12 @@ public class MainLauncherController {
     					allClients.get(selectedClient.getKey()).messagesTo.add(new Pair<String, String>(time, chatMessage.getText()));
     					refreshChatMessages(allClients.get(selectedClient.getKey()));
     					chatDisplayScrollPane.setVvalue(1.0);
-    					DatabaseReference user = database.getReference("Main/Users/" + selectedClient.getKey() + "/coaches/Coach123/");
+    					DatabaseReference user = database.getReference("Main/Users/" + selectedClient.getKey() + "/coaches/" + loggedIn.getKey() + "/");
     					HashMap<String, String> messagesTo = new HashMap<>();
     					for(Pair<String, String> message : allClients.get(selectedClient.getKey()).messagesTo)
     						messagesTo.put(message.getFirst(), message.getSecond());
     					user.setValue(messagesTo, null);
+    					chatMessage.setText("");
     					chatControllers.get(selectedClient.getKey()).refresh();
     		}	
     	});
@@ -738,6 +879,20 @@ public class MainLauncherController {
 			if(!otherPane.isDisabled() && !otherPane.equals(pane)) 
 				pageFadeOut(otherPane, true);		 
 	}
+    
+    public void loadCoaches() {
+    	DatabaseReference coaches = database.getReference("Main/Coaches");
+    	coaches.addListenerForSingleValueEvent(new ValueEventListener() {
+			@Override
+			public void onDataChange(DataSnapshot snapshot) {
+				snapshot.getChildren().forEach(coach -> {
+					allCoaches.put(coach.getKey(), new Coach(coach.getKey(), coach.child("firstname").getValue().toString(), coach.child("lastname").getValue().toString(), coach.child("display").getValue().toString(), coach.child("email").getValue().toString(), coach.child("hash").getValue().toString()));
+				});
+			}
+			@Override public void onCancelled(DatabaseError error) { System.out.println(error.getCode() + ": " + error.getDetails() + "\n--- " + error.getMessage()); }
+    	});
+    }
+    
     
     // Loads in all of the clients from the database and reads their goals and messages. Establishes ValueEventListener's for User Messages and each Coaches Messages
     //		in order to update chat once a message is received.
@@ -778,7 +933,7 @@ public class MainLauncherController {
 							user.child("coaches").getChildren().forEach(coach -> {
 								// TODO CHANGE COACH123 FROM BEING THE DEFAULT LOGGED IN COACH
 								// Separates message from the logged in coach and other coaches
-								if(coach.getKey().equals("Coach123"))
+								if(coach.getKey().equals(loggedIn.getKey()))
 									coach.getRef().addValueEventListener(new ValueEventListener() {
 										@Override
 										public void onDataChange(DataSnapshot messages) {
@@ -799,6 +954,7 @@ public class MainLauncherController {
 											     ((ArrayList<Pair<String, String>>)allClients.get(user.getKey()).messagesOther.get(coach.getKey())).add(new Pair<String, String>(message.getKey(), (String) message.getValue()));
 											 });
 											 loadMessages(user);
+											 chatControllers.get(user.getKey()).ping();
 										}
 										@Override public void onCancelled(DatabaseError error) { System.out.println(error.getCode() + ": " + error.getDetails() + "\n--- " + error.getMessage()); }
 									});
@@ -812,6 +968,7 @@ public class MainLauncherController {
 										allClients.get(user.getKey()).messages.add(new Pair<String, String>(message.getKey(), (String) message.getValue()));
 									});
 									loadMessages(user);
+									chatControllers.get(user.getKey()).ping();
 								}
 								@Override public void onCancelled(DatabaseError error) { System.out.println(error.getCode() + ": " + error.getDetails() + "\n--- " + error.getMessage()); }
 							});
@@ -845,10 +1002,9 @@ public class MainLauncherController {
 						}
 					});
 					chatPreviewsPane.getChildren().setAll(workingCollection);
-					refreshChatMessages(allClients.get(user.getKey()));	
+					refreshChatMessages(allClients.get(user.getKey()));
+					chatControllers.get(user.getKey()).setData(allClients.get(user.getKey()));
 				});
-				chatControllers.get(user.getKey()).setData(allClients.get(user.getKey()));	
-				
 			} else {
 				try {
 					if(allClients.get(user.getKey()).messages.size() != 0) {
@@ -867,6 +1023,7 @@ public class MainLauncherController {
 								value.setBackground(new Background(new BackgroundFill(Color.WHITE, CornerRadii.EMPTY, Insets.EMPTY)));
 							});
 							chatPreview.setBackground(new Background(new BackgroundFill(Color.LIGHTBLUE, CornerRadii.EMPTY, Insets.EMPTY)));
+							chatController.read();
 						});
 	
 						chatControllers.put(user.getKey(), chatController);
@@ -931,17 +1088,18 @@ public class MainLauncherController {
     
     
 	public void refreshChatMessages(Client clientKey) {
+			if(selectedClient.equals(clientKey)) {
 				chatDisplayMessages.getChildren().clear();
 				ArrayList<Pair<String, Pane>> allMessages = new ArrayList<>();
 				
-				for(Pair<String, Pane> message : createMessageDisplay(allClients.get(clientKey.getKey()).messagesTo, "Coach123", "#FC3D44", true))
+				for(Pair<String, Pane> message : createMessageDisplay(allClients.get(clientKey.getKey()).messagesTo, loggedIn.toString(), "#FC3D44", true))
 					allMessages.add(message);
 				
 				for(Pair<String, Pane> message : createMessageDisplay(allClients.get(clientKey.getKey()).messages, allClients.get(clientKey.getKey()).toString(), "#EFEFEF", false))
 					allMessages.add(message);
 				
 				allClients.get(clientKey.getKey()).messagesOther.forEach((coach, messages) -> {
-					for(Pair<String, Pane> message : createMessageDisplay(messages, coach, "lightblue", false))
+					for(Pair<String, Pane> message : createMessageDisplay(messages, allCoaches.get(coach).toString(), "lightblue", false))
 							allMessages.add(message);
 				});
 				
@@ -964,8 +1122,10 @@ public class MainLauncherController {
 				}
 				
 				Platform.runLater(() -> {
+					chatControllers.get(clientKey.getKey()).read();
 					chatDisplayScrollPane.setVvalue(1.0);
 				});
+			}
 	}
     
 	
